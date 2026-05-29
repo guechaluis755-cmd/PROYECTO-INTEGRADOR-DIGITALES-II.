@@ -1,1 +1,225 @@
+#include <ESP32Servo.h>
+#include <Wire.h>
+#include <U8g2lib.h>
 
+// ======================================================
+// OLED SSD1306 I2C
+// SDA -> GPIO21
+// SCL -> GPIO22
+// ======================================================
+
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+
+// ======================================================
+// SERVO 360
+// Señal -> GPIO18
+// ======================================================
+
+Servo servo;
+
+// ===== CALIBRACION SERVO =====
+int STOP  = 92;
+int SPEED = 8;
+
+int RIGHT = STOP + SPEED + 2;
+int LEFT  = STOP - SPEED + 2;
+
+// tiempo aproximado para 180°
+// debes calibrarlo
+int tiempo180 = 3000;
+
+// ======================================================
+// HC-SR04
+// ======================================================
+
+// SENSOR 1
+#define TRIG1 5
+#define ECHO1 19
+
+// SENSOR 2
+#define TRIG2 23
+#define ECHO2 25
+
+// ======================================================
+// VARIABLES
+// ======================================================
+
+float distancia1 = 0;
+float distancia2 = 0;
+
+// ======================================================
+// FUNCION MEDIR DISTANCIA
+// ======================================================
+
+float medirDistancia(int trigPin, int echoPin) {
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+
+  digitalWrite(trigPin, LOW);
+
+  long duracion = pulseIn(echoPin, HIGH, 30000);
+
+  // si no detecta nada
+  if (duracion == 0) {
+    return 0;
+  }
+
+  float distancia = duracion * 0.0343 / 2;
+
+  return distancia;
+}
+
+// ======================================================
+// FUNCION OLED
+// ======================================================
+
+void mostrarOLED(String direccion) {
+
+  u8g2.clearBuffer();
+
+  // ===== TITULO =====
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  u8g2.drawStr(18, 12, "RADAR ESP32");
+
+  // ===== LINEA =====
+  u8g2.drawLine(0, 16, 128, 16);
+
+  // ===== DIRECCION =====
+  u8g2.setFont(u8g2_font_6x12_tr);
+
+  u8g2.setCursor(5, 30);
+  u8g2.print("Movimiento:");
+
+  u8g2.setCursor(80, 30);
+  u8g2.print(direccion);
+
+  // ===== SENSOR 1 =====
+  u8g2.setCursor(5, 45);
+  u8g2.print("HC1:");
+
+  u8g2.setCursor(45, 45);
+  u8g2.print(distancia1, 1);
+  u8g2.print(" cm");
+
+  // ===== SENSOR 2 =====
+  u8g2.setCursor(5, 60);
+  u8g2.print("HC2:");
+
+  u8g2.setCursor(45, 60);
+  u8g2.print(distancia2, 1);
+  u8g2.print(" cm");
+
+  u8g2.sendBuffer();
+}
+
+// ======================================================
+// SETUP
+// ======================================================
+
+void setup() {
+
+  Serial.begin(115200);
+
+  // ===== OLED =====
+  u8g2.begin();
+
+  // ===== SERVO =====
+  servo.attach(18);
+
+  // ===== HC-SR04 =====
+  pinMode(TRIG1, OUTPUT);
+  pinMode(ECHO1, INPUT);
+
+  pinMode(TRIG2, OUTPUT);
+  pinMode(ECHO2, INPUT);
+
+  // ===== INICIO =====
+  servo.write(STOP);
+
+  u8g2.clearBuffer();
+
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  u8g2.drawStr(15, 30, "INICIANDO...");
+  u8g2.sendBuffer();
+
+  delay(2000);
+}
+
+// ======================================================
+// LOOP
+// ======================================================
+
+void loop() {
+
+  // ==================================================
+  // GIRAR DERECHA
+  // ==================================================
+
+  servo.write(RIGHT);
+
+  unsigned long tiempoInicio = millis();
+
+  while (millis() - tiempoInicio < tiempo180) {
+
+    distancia1 = medirDistancia(TRIG1, ECHO1);
+    distancia2 = medirDistancia(TRIG2, ECHO2);
+
+    mostrarOLED("Derecha");
+
+    // ===== SERIAL =====
+    Serial.print("HC1: ");
+    Serial.print(distancia1);
+    Serial.print(" cm   ");
+
+    Serial.print("HC2: ");
+    Serial.print(distancia2);
+    Serial.println(" cm");
+
+    delay(80);
+  }
+
+  // ===== DETENER =====
+  servo.write(STOP);
+
+  mostrarOLED("STOP");
+
+  delay(1000);
+
+  // ==================================================
+  // GIRAR IZQUIERDA
+  // ==================================================
+
+  servo.write(LEFT);
+
+  tiempoInicio = millis();
+
+  while (millis() - tiempoInicio < tiempo180) {
+
+    distancia1 = medirDistancia(TRIG1, ECHO1);
+    distancia2 = medirDistancia(TRIG2, ECHO2);
+
+    mostrarOLED("Izquierda");
+
+    // ===== SERIAL =====
+    Serial.print("HC1: ");
+    Serial.print(distancia1);
+    Serial.print(" cm   ");
+
+    Serial.print("HC2: ");
+    Serial.print(distancia2);
+    Serial.println(" cm");
+
+    delay(80);
+  }
+
+  // ===== DETENER =====
+  servo.write(STOP);
+
+  mostrarOLED("STOP");
+
+  delay(1000);
+}
